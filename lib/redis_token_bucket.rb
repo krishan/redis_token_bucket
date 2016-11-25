@@ -1,5 +1,10 @@
 require "redis_token_bucket/version"
+require "redis_token_bucket/limiter"
 
 module RedisTokenBucket
-  # Your code goes here...
+
+  def self.limiter(redis)
+    Limiter.new(redis)
+  end
+
 end
