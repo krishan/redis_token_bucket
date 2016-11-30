@@ -108,15 +108,31 @@ describe RedisTokenBucket do
     expect(limiter.read_levels(buckets)[:small]).to be >= 0.01
   end
 
-  it 'is resilient against missing scripts' do
-    limiter.read_levels(buckets)
+  it 'is resilient against empty script cache' do
+    levels = limiter.read_levels(buckets)
+    expect(levels).to eq({ small: 10, big: 100 })
 
     redis.script(:flush)
 
-    limiter.read_levels(buckets)
+    levels = limiter.read_levels(buckets)
+    expect(levels).to eq({ small: 10, big: 100 })
   end
 
-  it 'sucessfully charges tokens if every bucket has sufficient tokens' do
+  it 'is resilient against clock anomalies' do
+    limiter.charge(buckets, 1)
+    expect(limiter.read_levels(buckets)).to eq({ small: 9, big: 99 })
+
+    time_passes(-1)
+    expect(limiter.read_levels(buckets)).to eq({ small: 9, big: 99 })
+
+    time_passes(1)
+    expect(limiter.read_levels(buckets)).to eq({ small: 9, big: 99 })
+
+    time_passes(1)
+    expect(limiter.read_levels(buckets)).to eq({ small: 10, big: 100 })
+  end
+
+  it 'sucessfully charges tokens iff every bucket has sufficient tokens' do
     success, levels = limiter.charge(buckets, 7)
     expect(success).to be_truthy
     expect(levels).to eq({ small: 3, big: 93 })

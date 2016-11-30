@@ -21,33 +21,35 @@ for key_index, key in ipairs(KEYS) do
   local last_time = tonumber(bucket[1]) or now
   local before_level = tonumber(bucket[2]) or size
 
-  local elapsed = now - last_time
+  local elapsed = math.max(0, now - last_time)
   local gained = rate * elapsed
 
   local current_level = math.min(size, before_level + gained)
 
   current_bucket_levels[key_index] = current_level
 
-  local new_level = current_level - amount
-  new_bucket_levels[key_index] = new_level
+  if amount > 0 then
+    local new_level = current_level - amount
+    new_bucket_levels[key_index] = new_level
 
-  local seconds_to_full = (size - new_level) / rate
-  timeouts[key_index] = seconds_to_full
+    local seconds_to_full = (size - new_level) / rate
+    timeouts[key_index] = seconds_to_full
 
-  if new_level < 0 then
-    exceeded = true
+    if new_level < 0 then
+      exceeded = true
+    end
   end
 end
 
 local levels_to_report
-local success
+local charged
 
-if exceeded then
+if exceeded or amount <= 0 then
   levels_to_report = current_bucket_levels
-  success = 0
+  charged = 0
 else
   levels_to_report = new_bucket_levels
-  success = 1
+  charged = 1
 
   for key_index, key in ipairs(KEYS) do
     local new_level = new_bucket_levels[key_index]
@@ -67,4 +69,4 @@ for index, value in ipairs(levels_to_report) do
   formatted_levels[index] = string.format("%.16g", value)
 end
 
-return {success, formatted_levels}
+return {charged, formatted_levels}
