@@ -4,11 +4,11 @@ require "redis"
 require "securerandom"
 
 puts <<-EOS
-  The script attempts to make a huge number of requests against the rate limiter.
+  The script attempts to continuously make requests against the rate limiter.
   Each second, the number of requests accepted and denied by the rate limiter is printed.
 
   You should see the following pattern:
-  * briefly, a burst of requests is permitted
+  * briefly, a burst of requests is accepted
   * then the 'short' buckets starts limiting to 1000 requests per second
   * after a few seconds, the 'long' buckets starts limiting to 100 requests per second
 
@@ -34,7 +34,7 @@ buckets = {
 consumed = Concurrent::Atom.new(0)
 
 rejected = {}
-buckets.each { |name, bucket| rejected[name] = Concurrent::Atom.new(0) }
+buckets.each { |name, _| rejected[name] = Concurrent::Atom.new(0) }
 
 def increase(atom)
   atom.swap { |before| before + 1 }
@@ -82,19 +82,21 @@ child_processes = NUM_FORKS.times.map do
           limiter = RedisTokenBucket.limiter(Redis.new)
 
           while true
-            success, levels = limiter.charge(buckets, 1)
+            success, levels = limiter.batch_charge([buckets[:short], 1], [buckets[:long], 1])
 
             if success
               increase(consumed)
             else
-              levels.map do |name, level|
+              levels.map do |key, level|
+                name = buckets.keys.detect { |n| buckets[n][:key] == key }
                 increase(rejected[name]) if level < 1
               end
             end
           end
-        rescue e
+        rescue Exception => e
           puts "ERROR"
           puts e
+          puts e.backtrace
         end
       end
     end

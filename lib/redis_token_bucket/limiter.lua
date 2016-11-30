@@ -1,5 +1,3 @@
-local amount = tonumber(ARGV[2])
-
 redis.replicate_commands()
 local injected_time = tonumber(ARGV[1])
 local redis_time = redis.call('time')
@@ -13,9 +11,10 @@ local timeouts = {}
 local exceeded = false
 
 for key_index, key in ipairs(KEYS) do
-  local arg_index = key_index * 3
+  local arg_index = key_index * 4 - 2
   local rate = tonumber(ARGV[arg_index])
   local size = tonumber(ARGV[arg_index + 1])
+  local amount = tonumber(ARGV[arg_index + 2])
 
   local bucket = redis.call('hmget', key, 'time', 'level')
   local last_time = tonumber(bucket[1]) or now
@@ -29,7 +28,7 @@ for key_index, key in ipairs(KEYS) do
   current_bucket_levels[key_index] = current_level
 
   if amount > 0 then
-    local limit = tonumber(ARGV[arg_index + 2]) or 0
+    local limit = tonumber(ARGV[arg_index + 3]) or 0
 
     local new_level = current_level - amount
     new_bucket_levels[key_index] = new_level
@@ -46,7 +45,7 @@ end
 local levels_to_report
 local charged
 
-if exceeded or amount <= 0 then
+if exceeded or #new_bucket_levels == 0 then
   levels_to_report = current_bucket_levels
   charged = 0
 else

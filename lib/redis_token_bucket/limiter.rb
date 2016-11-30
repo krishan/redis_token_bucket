@@ -1,4 +1,3 @@
-# TODO integrative test using the "main.rb"
 module RedisTokenBucket
 class Limiter
   def initialize(redis, clock = nil)
@@ -6,51 +5,77 @@ class Limiter
     @clock = clock
   end
 
-  # tries to charges `amount` tokens to each of the specified `buckets`.
+  # charges `amount` tokens to the specified `bucket`.
+  #
+  # charging only happens if the bucket has sufficient tokens.
+  # the level of "sufficient tokens" can be adjusted by passing in option[:limit]
+  #
+  # returns a tuple (= Array with two elements) containing
+  # `success:boolean` and `level:Numeric`
+  def charge(bucket, amount, options = nil)
+    success, levels = batch_charge([bucket, amount, options])
+
+    return success, levels[bucket[:key]]
+  end
+
+  # performs several bucket charge operations in batch.
+  #
+  # each operation is passed in as an Array, containing the parameters
+  # for `batch`.
   #
   # charging only happens if all buckets have sufficient tokens.
-  # the charge is done transactionally, so either all buckets are charged or none.
+  # the charges are done transactionally, so either all buckets are charged or none.
   #
   # returns a tuple (= Array with two elements) containing
   # `success:boolean` and `levels:Hash<String, Numeric>`
-  def charge(buckets, amount)
-    unless amount > 0
-      message = "tried to charge #{amount}, needs to be Numeric and > 0"
-      raise ArgumentError, message
+  # where `levels` is a hash from bucket keys to bucket levels.
+  def batch_charge(*charges)
+    charges.each do |(bucket, amount, options)|
+      unless amount > 0
+        message = "tried to charge #{amount}, needs to be Numeric and > 0"
+        raise ArgumentError, message
+      end
     end
 
-    run_script(buckets, amount)
+    run_script(charges)
+  end
+
+  # returns the current level of tokens in the specified `bucket`.
+  def read_level(bucket)
+    read_levels(bucket)[bucket[:key]]
   end
 
   # reports the current level of tokens for each of the specified `buckets`.
-  # returns the levels as a Hash from bucket names to levels
-  def read_levels(buckets)
-    run_script(buckets, 0)[1]
+  # returns the levels as a Hash from bucket keys to bucket levels.
+  def read_levels(*buckets)
+    _, levels = run_script(buckets.map { |bucket| [bucket, 0] })
+
+    levels
   end
 
   private
 
-  def run_script(buckets, amount)
-    bucket_names = buckets.keys
-
-    props = bucket_names.map { |name| props_for_bucket(buckets[name]) }.flatten
+  def run_script(charges)
+    props = charges.map(&method(:props_for_charge)).flatten
     time = @clock.call if @clock
 
-    argv = [time, amount] + props
-    keys = bucket_names.map { |name| buckets[name][:key] }
+    argv = [time] + props
+    keys = charges.map { |(bucket, _, _)| bucket[:key] }
 
     success, levels = eval_script(:keys => keys, :argv => argv)
 
     levels_as_hash = {}
     levels.each_with_index do |level, index|
-      levels_as_hash[bucket_names[index]] = level.to_f
+      levels_as_hash[keys[index]] = level.to_f
     end
 
     [success > 0, levels_as_hash]
   end
 
-  def props_for_bucket(bucket)
-    [bucket[:rate], bucket[:size], bucket[:limit]]
+  def props_for_charge(charge)
+    bucket, amount, options = charge
+
+    [bucket[:rate], bucket[:size], amount, options ? options[:limit] : nil]
   end
 
   def eval_script(options)
