@@ -13,7 +13,7 @@ local timeouts = {}
 local exceeded = false
 
 for key_index, key in ipairs(KEYS) do
-  local arg_index = key_index * 2 + 1
+  local arg_index = key_index * 3
   local rate = tonumber(ARGV[arg_index])
   local size = tonumber(ARGV[arg_index + 1])
 
@@ -29,13 +29,15 @@ for key_index, key in ipairs(KEYS) do
   current_bucket_levels[key_index] = current_level
 
   if amount > 0 then
+    local limit = tonumber(ARGV[arg_index + 2]) or 0
+
     local new_level = current_level - amount
     new_bucket_levels[key_index] = new_level
 
     local seconds_to_full = (size - new_level) / rate
     timeouts[key_index] = seconds_to_full
 
-    if new_level < 0 then
+    if new_level < limit then
       exceeded = true
     end
   end

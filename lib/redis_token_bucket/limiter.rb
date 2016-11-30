@@ -1,4 +1,3 @@
-# TODO each bucket with separate "minimum", allows to model both "reserved" and "debt/force"
 # TODO integrative test using the "main.rb"
 module RedisTokenBucket
 class Limiter
@@ -15,6 +14,11 @@ class Limiter
   # returns a tuple (= Array with two elements) containing
   # `success:boolean` and `levels:Hash<String, Numeric>`
   def charge(buckets, amount)
+    unless amount > 0
+      message = "tried to charge #{amount}, needs to be Numeric and > 0"
+      raise ArgumentError, message
+    end
+
     run_script(buckets, amount)
   end
 
@@ -28,13 +32,14 @@ class Limiter
 
   def run_script(buckets, amount)
     bucket_names = buckets.keys
-    keys = bucket_names.map { |name| buckets[name][:key] }
-    props = bucket_names.map { |name| [buckets[name][:rate], buckets[name][:size]] }.flatten
 
+    props = bucket_names.map { |name| props_for_bucket(buckets[name]) }.flatten
     time = @clock.call if @clock
 
-    # TODO evalsha
-    success, levels, debug = eval_script(:keys => keys, :argv => [time, amount] + props)
+    argv = [time, amount] + props
+    keys = bucket_names.map { |name| buckets[name][:key] }
+
+    success, levels = eval_script(:keys => keys, :argv => argv)
 
     levels_as_hash = {}
     levels.each_with_index do |level, index|
@@ -42,6 +47,10 @@ class Limiter
     end
 
     [success > 0, levels_as_hash]
+  end
+
+  def props_for_bucket(bucket)
+    [bucket[:rate], bucket[:size], bucket[:limit]]
   end
 
   def eval_script(options)

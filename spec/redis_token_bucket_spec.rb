@@ -153,4 +153,33 @@ describe RedisTokenBucket do
     expect(success).to be_truthy
     expect(levels).to eq({ small: 0, big: 88 })
   end
+
+  it 'reserves tokens, when using a positive limit' do
+    buckets[:small][:limit] = 5
+
+    success, levels = limiter.charge(buckets, 5)
+    expect(success).to be_truthy
+    expect(levels).to eq({ small: 5, big: 95 })
+
+    success, levels = limiter.charge(buckets, 1)
+    expect(success).to be_falsey
+    expect(levels).to eq({ small: 5, big: 95 })
+  end
+
+  it 'allows token debt, when using a negative limit' do
+    buckets[:small][:limit] = -5
+
+    success, levels = limiter.charge(buckets, 15)
+    expect(success).to be_truthy
+    expect(levels).to eq({ small: -5, big: 85 })
+
+    success, levels = limiter.charge(buckets, 1)
+    expect(success).to be_falsey
+    expect(levels).to eq({ small: -5, big: 85 })
+  end
+
+  it 'refuses to charge an amount of zero or smaller' do
+    expect { limiter.charge(buckets, 0) }.to raise_error(ArgumentError)
+    expect { limiter.charge(buckets, -1) }.to raise_error(ArgumentError)
+  end
 end
