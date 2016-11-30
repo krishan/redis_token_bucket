@@ -1,3 +1,12 @@
 language: ruby
 rvm:
-  - 2.1.5
+  - 2.2
+before_install:
+  - gem update bundler
+script: bundle exec rspec spec
+services:
+  - redis-server
+addons:
+  apt:
+    packages:
+      - redis-server
