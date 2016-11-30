@@ -1,8 +1,23 @@
 # RedisTokenBucket
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/redis_token_bucket`. To experiment with that code, run `bin/console` for an interactive prompt.
+A [Token Bucket](https://en.wikipedia.org/wiki/Token_bucket) rate limiting implementation in Ruby using a Redis backend.
 
-TODO: Delete this and the text above, and describe your gem
+Features:
+* Lightweight and efficient
+  * Uses a single Redis key per bucket
+  * Buckets are automatically created when first used
+  * Buckets are automatically removed when no longer used
+* Fast and concurrency safe
+  * Each operation uses just a single network roundtrip to Redis
+  * Charging tokens is done with all-or-nothing semantics
+* Computed continuously
+  * Token values (rate, size, current level, cost) use floating point numbers
+  * Bucket level is computed with microsecond precision
+* Powerful and flexible
+  * Ability to charge multiple buckets with arbitrary token amounts at once
+  * Ability to "reserve" tokens and to create "token debt"
+
+Redis version 3.2 or newer is needed.
 
 ## Installation
 
@@ -12,28 +27,123 @@ Add this line to your application's Gemfile:
 gem 'redis_token_bucket'
 ```
 
-And then execute:
-
-    $ bundle
-
-Or install it yourself as:
-
-    $ gem install redis_token_bucket
-
 ## Usage
 
-TODO: Write usage instructions here
+Basic rate limiting:
+
+```ruby
+require 'redis'
+require 'redis_token_bucket'
+
+# create connection to redis server
+# details see: https://github.com/redis/redis-rb/
+redis = Redis.new
+
+# create a limiter instance which uses the redis connection
+limiter = RedisTokenBucket.limiter(redis)
+
+# define the bucket
+bucket = {
+  key: "RedisKeyForMyBucket",
+  rate: 100,
+  size: 1000,
+}
+
+# charge 10 tokens to the bucket
+success, level = limiter.charge(bucket, 10)
+
+# check if charging was successful
+if success
+  # rate limiter permits request
+  call_my_business_logic
+else
+  # rate limiter denies request
+  raise "Rate Limit exceeded. Increase you calm!"
+end
+
+# print the resulting level of tokens in the bucket
+puts "The current level of tokens in my bucket: #{level}"
+
+```
+
+Reading the current level of tokens of a bucket:
+
+```ruby
+puts "Current level of tokens: #{limiter.read_level(bucket)}"
+```
+
+Charging multiple buckets at once:
+
+```ruby
+long_bucket = {
+  key: "RedisKeyForLongBucket",
+  rate: 100,
+  size: 10000
+}
+
+short_bucket = {
+  key: "RedisKeyForShortBucket",
+  rate: 1000,
+  size: 3000
+}
+
+success, levels = limiter.batch_charge(
+  [long_bucket, 1],
+  [short_bucket, 1]
+)
+
+puts "The current level of tokens in bucket short: #{levels[short_bucket[:key]]}"
+puts "The current level of tokens in bucket long: #{levels[long_bucket[:key]]}"
+
+if success
+  # rate limiter permits request (all buckets were charged)
+  call_my_business_logic
+else
+  # rate limiter denies request (none of the buckets was charged)
+  raise "Rate Limit exceeded. Increase you calm!"
+end
+```
+
+Reading the current level of tokens from multiple buckets:
+
+```ruby
+levels = limiter.read_levels(short_bucket, long_bucket)
+
+puts "The current level of tokens in bucket short: #{levels[short_bucket[:key]]}"
+puts "The current level of tokens in bucket long: #{levels[long_bucket[:key]]}"
+```
+
+Advanced: Bucket with Reserved Tokens
+
+```ruby
+# this reserves the last 10 tokens,
+# i.e. charging will fail if it would result in less than 10 tokens
+
+RedisTokenBucket.charge(bucket, 1, {limit: 10})
+
+# also possible with batch_charge
+RedisTokenBucket.batch_charge(
+  [short_bucket, 1, {limit: 10}],
+  [long_bucket, 2, {limit: 5}],
+)
+```
+
+Advanced: Bucket with Token Debt
+
+```ruby
+# this allows up to 10 "negative" tokens
+# i.e. charging will only fail if it would result in less than -10 tokens
+RedisTokenBucket.charge(bucket, 1, {limit: -10})
+```
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `bin/console` for an interactive prompt that will allow you to experiment.
+After checking out the repo, run `bundle` to install dependencies.
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release` to create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+Use `bundle exec rspec` to run tests.
 
-## Contributing
+Use `bundle exec ruby demo.rb` to run a demo.
 
-1. Fork it ( https://github.com/[my-github-username]/redis_token_bucket/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+## Contributors
+
+Original author: Kristian Hanekamp
