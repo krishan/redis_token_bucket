@@ -1,4 +1,5 @@
 require 'redis'
+require 'securerandom'
 require 'spec_helper'
 
 describe RedisTokenBucket do
