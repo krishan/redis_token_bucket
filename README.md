@@ -9,11 +9,12 @@ Features:
   * Buckets are automatically removed when no longer used
 * Fast and concurrency safe
   * Each operation uses just a single network roundtrip to Redis
-  * Charging tokens is done with all-or-nothing semantics
+  * Charging tokens can be done with all-or-nothing semantics
 * Computed continuously
   * Token values (rate, size, current level, cost) use floating point numbers
   * Bucket level is computed with microsecond precision
 * Powerful and flexible
+  * Ability to use take-what-is-there semantics (instead of all-or-nothing)
   * Ability to charge multiple buckets with arbitrary token amounts at once
   * Ability to "reserve" tokens and to create "token debt"
 
@@ -112,6 +113,19 @@ levels = limiter.read_levels(short_bucket, long_bucket)
 puts "The current level of tokens in bucket short: #{levels[short_bucket[:key]]}"
 puts "The current level of tokens in bucket long: #{levels[long_bucket[:key]]}"
 ```
+
+Charging with "take-what-is-there" semantics:
+
+```ruby
+
+call_my_business_logic
+
+success, levels = limiter.batch_charge(
+  [bucket, 1, {allow_charge_adjustment: true}]
+)
+```
+
+If you use the `allow_charge_adjustment` option, the charge will succeed, even if the bucket has insufficient tokens. In that case, as much as possible will be charged from the bucket. This may be useful, if your application wants to charge "after the fact", e.g. after your business logic has already run.
 
 Advanced: Bucket with Reserved Tokens
 
