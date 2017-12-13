@@ -75,7 +75,13 @@ class Limiter
   def props_for_charge(charge)
     bucket, amount, options = charge
 
-    [bucket[:rate], bucket[:size], amount, options ? options[:limit] : nil]
+    [
+      bucket[:rate],
+      bucket[:size],
+      amount,
+      options ? options[:limit] : nil,
+      options && options[:allow_charge_adjustment] ? 1 : 0,
+    ]
   end
 
   def eval_script(options)

@@ -1,4 +1,5 @@
 require 'redis'
+require 'securerandom'
 require 'spec_helper'
 
 describe RedisTokenBucket do
@@ -190,5 +191,48 @@ describe RedisTokenBucket do
 
     level = limiter.read_level(small_bucket)
     expect(level).to eq(5)
+  end
+
+  context "if charge adjustment is allowed" do
+    let(:no_debt_key) { random_key }
+    let(:debt_key) { random_key }
+    let(:no_debt_bucket) {{ rate: 1, size: 10,  key: no_debt_key }}
+    let(:debt_bucket) {{ rate: 1, size: 10, key: debt_key }}
+
+    def charge
+      limiter.batch_charge(
+        [no_debt_bucket, no_debt_amount, {allow_charge_adjustment: true}],
+        [debt_bucket, debt_amount, {limit: -10, allow_charge_adjustment: true}],
+      )
+    end
+
+    context "and bucket has enough tokens" do
+      let(:no_debt_amount) { 3 }
+      let(:debt_amount) { 13 }
+
+      it "charges only the requested amount" do
+        success, levels = charge
+        expect(success).to be_truthy
+        expect(levels[no_debt_key]).to eq(7.0)
+        expect(levels[debt_key]).to eq(-3.0)
+      end
+    end
+
+    context "and bucket does not have enough tokens" do
+      let(:no_debt_amount) { 8 }
+      let(:debt_amount) { 8 }
+
+      before { limiter.batch_charge([no_debt_bucket, 5], [debt_bucket, 15, {limit: -10}]) }
+
+      it "charges all available tokens" do
+        expect {
+          success, _ = charge
+          expect(success).to be_truthy
+        }.to change {
+          limiter.read_levels(no_debt_bucket, debt_bucket)
+        }.from({no_debt_key => 5.0, debt_key => -5.0})
+            .to({no_debt_key => 0.0, debt_key => -10.0})
+      end
+    end
   end
 end
