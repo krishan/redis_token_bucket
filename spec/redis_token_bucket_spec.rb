@@ -12,7 +12,7 @@ describe RedisTokenBucket do
 
   let(:buckets) { [small_bucket, big_bucket] }
 
-  let(:redis) { Redis.connect }
+  let(:redis) { Redis.new }
 
   let(:limiter) do
     RedisTokenBucket::Limiter.new(redis, proc { @fake_time })
@@ -99,7 +99,7 @@ describe RedisTokenBucket do
 
   it 'uses actual time from redis server' do
     # use limiter without faked time
-    limiter = RedisTokenBucket::Limiter.new(Redis.connect)
+    limiter = RedisTokenBucket::Limiter.new(Redis.new)
 
     _, level = limiter.charge(small_bucket, 10)
     expect(level).to eq(0)
