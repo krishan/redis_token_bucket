@@ -1,0 +1,16 @@
+version: 2.1
+
+jobs:
+  run-specs:
+    docker:
+      - image: cimg/ruby:2.7.2
+      - image: cimg/redis:5.0.14
+    steps:
+      - checkout
+      - run: ruby --version
+      - run: bundle install
+      - run: bundle exec rspec spec
+workflows:
+  run-specs-workflow:
+    jobs:
+      - run-specs
