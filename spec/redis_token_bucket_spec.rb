@@ -179,9 +179,19 @@ describe RedisTokenBucket do
     expect(levels).to eq({ small_key => -5, big_key => 85 })
   end
 
-  it 'refuses to charge an amount of zero or smaller' do
-    expect { limiter.charge(small_bucket, 0) }.to raise_error(ArgumentError)
-    expect { limiter.charge(small_bucket, -1) }.to raise_error(ArgumentError)
+  it 'allows returning tokens by charging negative value' do
+    limiter.batch_charge([small_bucket, 10])
+    expect(limiter.read_level(small_bucket)).to eq(0)
+
+    success, levels = limiter.batch_charge([small_bucket, -3])
+    expect(success).to be_truthy
+    expect(levels[small_key]).to eq(3.0)
+  end
+
+  it 'does not allow refilling beyond bucket size' do
+    success, levels = limiter.batch_charge([small_bucket, -99])
+    expect(success).to be_truthy
+    expect(levels[small_key]).to eq(10)
   end
 
   it 'offers a convenience syntax to charge a single bucket' do

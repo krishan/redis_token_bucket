@@ -27,10 +27,10 @@ for key_index, key in ipairs(KEYS) do
 
   current_bucket_levels[key_index] = current_level
 
-  if amount > 0 then
+  if amount ~= 0 then
     local limit = tonumber(ARGV[arg_index + 3]) or 0
 
-    local new_level = current_level - amount
+    local new_level = math.min(size, current_level - amount)
 
     local seconds_to_full = (size - new_level) / rate
     timeouts[key_index] = seconds_to_full

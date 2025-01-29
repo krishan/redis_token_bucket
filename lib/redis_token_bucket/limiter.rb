@@ -30,13 +30,6 @@ class Limiter
   # `success:boolean` and `levels:Hash<String, Numeric>`
   # where `levels` is a hash from bucket keys to bucket levels.
   def batch_charge(*charges)
-    charges.each do |(bucket, amount, options)|
-      unless amount > 0
-        message = "tried to charge #{amount}, needs to be Numeric and > 0"
-        raise ArgumentError, message
-      end
-    end
-
     run_script(charges)
   end
 
